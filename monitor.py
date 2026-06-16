@@ -14,11 +14,9 @@ URL = "https://www.nifdc.org.cn/nifdc/bshff/bzhwzh/bzwztzgg/index.html"
 RECEIVER = "1065351139@qq.com"
 LOG_FILE = "send_log.json"
 
-# 中文数字转阿拉伯数字映射
 CN_NUM = {'一':1, '二':2, '三':3, '四':4, '五':5, '六':6, '七':7, '八':8, '九':9, '十':10, '百':100}
 
 def cn_to_an(cn):
-    """简单将中文数字转为阿拉伯数字（支持百以内）"""
     if not cn: return 0
     if cn.isdigit(): return int(cn)
     val = 0
@@ -33,19 +31,16 @@ def cn_to_an(cn):
     return val
 
 def send_email(subject, content):
-    """发送邮件"""
     smtp_server = "smtp.qq.com"
     port = 465
-    sender = os.environ.get("EMAIL_USERNAME")      # 你的QQ邮箱，例如: xxx@qq.com
-    password = os.environ.get("EMAIL_PASSWORD")    # 你的邮箱授权码
+    sender = os.environ.get("EMAIL_USERNAME")
+    password = os.environ.get("EMAIL_PASSWORD")
 
     if not sender or not password:
         print("未配置邮箱环境变量，取消发送。")
         return False
 
     message = MIMEText(content, 'html', 'utf-8')
-    
-    # 【修复核心】：严格按照 RFC5322 标准格式化发件人，消除 550 错误
     message['From'] = formataddr((str(Header('中检院监控助手', 'utf-8')), sender))
     message['To'] = formataddr((str(Header('管理员', 'utf-8')), RECEIVER))
     message['Subject'] = Header(subject, 'utf-8')
@@ -62,7 +57,7 @@ def send_email(subject, content):
         return False
 
 def main():
-    # 1. 读取历史发送日志防止重复发送
+    # 1. 读取历史发送日志
     history = {}
     if os.path.exists(LOG_FILE):
         try:
@@ -94,36 +89,45 @@ def main():
         if href and not href.startswith('http'):
             href = "https://www.nifdc.org.cn" + href
         
-        # 提取期数
         match = re.search(r"第([0-9一二三四五六七八九十]+)期", title)
         if match:
             stage_str = match.group(1)
             stage_num = cn_to_an(stage_str)
             
-            # 测试阶段大于等于17期触发
+            # 【温馨提示】测试完17期后，随时可以把这里改回 18
             if stage_num >= 17:
+                # 排除我们为了保活而加入的干扰项，只比对真正的文章标题
                 if title not in history:
                     matched_notices.append({"title": title, "url": href})
 
-    # 4. 如果有新满足条件的通知，发邮件并记录
+    # 4. 判断并处理结果
+    current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
     if matched_notices:
-        email_content = "<h3>发现中检院新发布的相关目录通知（测试版）：</h3><ul>"
+        email_content = "<h3>发现中检院新发布的相关目录通知：</h3><ul>"
         for notice in matched_notices:
             email_content += f'<li><a href="{notice["url"]}">{notice["title"]}</a></li>'
         email_content += "</ul>"
         
-        subject = f"【中检院监控测试】发现第17期及以上体外诊断试剂标准品目录更新"
+        subject = f"【中检院提示】发现第17期及以上体外诊断试剂标准品目录更新"
         
         if send_email(subject, email_content):
             for notice in matched_notices:
-                history[notice["title"]] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                history[notice["title"]] = current_time_str
             
+            # 更新日志并触发 GitHub 提交
+            history["last_check"] = current_time_str
             with open(LOG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(history, f, ensure_ascii=False, indent=4)
-            
             print("HAS_NEW_LOG=true")
     else:
-        print("未检测到未通知的新期数，或者所有符合条件的通知均已发送过邮件。")
+        print("未检测到未通知的新期数。")
+        # 【核心保活机制】：即便没有新公告，也更新最后检查时间，强行让文件发生变动
+        # 这样 GitHub Actions 每天都会帮我们提交一次代码，仓库永远不会进入休眠！
+        history["last_check"] = current_time_str
+        with open(LOG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(history, f, ensure_ascii=False, indent=4)
+        print("HAS_NEW_LOG=true")
 
 if __name__ == "__main__":
     main()
