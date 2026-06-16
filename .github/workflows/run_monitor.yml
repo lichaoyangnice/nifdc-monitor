@@ -2,9 +2,9 @@ name: NIFDC Website Monitor
 
 on:
   schedule:
-    # 每天北京时间早上 9点 和 下午 4点 各运行一次（UTC 时间 1:00 和 8:00）
-    - cron: '0 1,8 * * *'
-  workflow_dispatch: # 允许手动点击运行
+    # 北京时间每天早上 10:00 运行一次 (对应 UTC 时间 02:00)
+    - cron: '0 2 * * *'
+  workflow_dispatch: # 保持手动运行按钮
 
 jobs:
   monitor:
