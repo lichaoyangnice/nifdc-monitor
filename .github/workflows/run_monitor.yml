@@ -1,0 +1,46 @@
+name: NIFDC Website Monitor
+
+on:
+  schedule:
+    # 每天北京时间早上 9点 和 下午 4点 各运行一次（UTC 时间 1:00 和 8:00）
+    - cron: '0 1,8 * * *'
+  workflow_dispatch: # 允许手动点击运行
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # 允许脚本更新仓库里的日志文件
+
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v3
+
+    - name: 设置 Python 环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: 安装依赖
+      run: |
+        pip install requests beautifulsoup4
+
+    - name: 运行监控脚本
+      env:
+        EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
+        EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+      run: |
+        python monitor.py > output.log
+        cat output.log
+        if grep -q "HAS_NEW_LOG=true" output.log; then
+          echo "NEW_DATA=true" >> $GITHUB_ENV
+        fi
+
+    - name: 提交日志文件回仓库（防止重复发送）
+      if: env.NEW_DATA == 'true'
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        git add send_log.json
+        git commit -m "Update send_log: mail sent"
+        git push
