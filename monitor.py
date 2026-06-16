@@ -4,6 +4,7 @@ import smtplib
 import json
 from email.mime.text import MIMEText
 from email.header import Header
+from email.utils import formataddr
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
@@ -33,18 +34,20 @@ def cn_to_an(cn):
 
 def send_email(subject, content):
     """发送邮件"""
-    smtp_server = "smtp.qq.com" # 如果你用QQ邮箱发，若是163请换成 smtp.163.com
+    smtp_server = "smtp.qq.com"
     port = 465
-    sender = os.environ.get("EMAIL_USERNAME")
-    password = os.environ.get("EMAIL_PASSWORD")
+    sender = os.environ.get("EMAIL_USERNAME")      # 你的QQ邮箱，例如: xxx@qq.com
+    password = os.environ.get("EMAIL_PASSWORD")    # 你的邮箱授权码
 
     if not sender or not password:
         print("未配置邮箱环境变量，取消发送。")
         return False
 
     message = MIMEText(content, 'html', 'utf-8')
-    message['From'] = Header(f"中检院监控助手 <{sender}>", 'utf-8')
-    message['To'] = Header(RECEIVER, 'utf-8')
+    
+    # 【修复核心】：严格按照 RFC5322 标准格式化发件人，消除 550 错误
+    message['From'] = formataddr((str(Header('中检院监控助手', 'utf-8')), sender))
+    message['To'] = formataddr((str(Header('管理员', 'utf-8')), RECEIVER))
     message['Subject'] = Header(subject, 'utf-8')
 
     try:
@@ -81,8 +84,6 @@ def main():
 
     # 3. 解析网页内容
     soup = BeautifulSoup(response.text, 'html.parser')
-    
-    # 遍历页面所有超链接，筛选包含目标关键词的通知
     links = [a for a in soup.find_all('a') if a.get_text() and "注册检验用体外诊断试剂国家标准品和参考品目录" in a.get_text()]
 
     matched_notices = []
@@ -99,9 +100,8 @@ def main():
             stage_str = match.group(1)
             stage_num = cn_to_an(stage_str)
             
-            # 【测试调整】：只要大于等于 17 期就触发（可以匹配到现有的第十七期公告）
+            # 测试阶段大于等于17期触发
             if stage_num >= 17:
-                # 【核心防重复逻辑】：如果这个标题在历史记录 (history) 中不存在，才加入发送列表
                 if title not in history:
                     matched_notices.append({"title": title, "url": href})
 
@@ -115,14 +115,12 @@ def main():
         subject = f"【中检院监控测试】发现第17期及以上体外诊断试剂标准品目录更新"
         
         if send_email(subject, email_content):
-            # 发送成功后，将这些标题写入历史日志
             for notice in matched_notices:
                 history[notice["title"]] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
             with open(LOG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(history, f, ensure_ascii=False, indent=4)
             
-            # 激活 GitHub Actions 的提交逻辑
             print("HAS_NEW_LOG=true")
     else:
         print("未检测到未通知的新期数，或者所有符合条件的通知均已发送过邮件。")
