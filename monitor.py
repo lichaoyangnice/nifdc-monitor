@@ -109,25 +109,19 @@ def main():
             email_content += f'<li><a href="{notice["url"]}">{notice["title"]}</a></li>'
         email_content += "</ul>"
         
-        subject = f"【中检院提示】发现第17期及以上体外诊断试剂标准品目录更新"
+        # 自动切换为第18期（可以根据你的温馨提示随时调整）
+        subject = f"【中检院提示】发现第18期及以上体外诊断试剂标准品目录更新"
         
         if send_email(subject, email_content):
             for notice in matched_notices:
                 history[notice["title"]] = current_time_str
             
-            # 更新日志并触发 GitHub 提交
-            history["last_check"] = current_time_str
+            # 更新真正的历史发送日志
             with open(LOG_FILE, 'w', encoding='utf-8') as f:
                 json.dump(history, f, ensure_ascii=False, indent=4)
+            
+            # 通知 GitHub Actions：有新日志，需要跟着一起提交
             print("HAS_NEW_LOG=true")
     else:
+        # 没有新公告时，保持安静，直接打印即可
         print("未检测到未通知的新期数。")
-        # 【核心保活机制】：即便没有新公告，也更新最后检查时间，强行让文件发生变动
-        # 这样 GitHub Actions 每天都会帮我们提交一次代码，仓库永远不会进入休眠！
-        history["last_check"] = current_time_str
-        with open(LOG_FILE, 'w', encoding='utf-8') as f:
-            json.dump(history, f, ensure_ascii=False, indent=4)
-        print("HAS_NEW_LOG=true")
-
-if __name__ == "__main__":
-    main()
