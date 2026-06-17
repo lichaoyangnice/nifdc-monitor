@@ -10,7 +10,7 @@ jobs:
   monitor:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # 允许脚本更新仓库里的日志文件
+      contents: write # 必须开放写权限，否则无法 push 提交
 
     steps:
     - name: 检出代码
@@ -32,15 +32,29 @@ jobs:
       run: |
         python monitor.py > output.log
         cat output.log
+        # 判断是否发送了新邮件
         if grep -q "HAS_NEW_LOG=true" output.log; then
-          echo "NEW_DATA=true" >> $GITHUB_ENV
+          echo "MAIL_SENT=true" >> $GITHUB_ENV
         fi
 
-    - name: 提交日志文件回仓库（防止重复发送）
-      if: env.NEW_DATA == 'true'
+    - name: 纯原生 Git 命令保活与数据同步
       run: |
+        # 1. 配置 Git 机器人身份
         git config --global user.name "github-actions[bot]"
         git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        git add send_log.json
-        git commit -m "Update send_log: mail sent"
-        git push
+        
+        # 2. 无论是否发送邮件，都强制向保活文件写入当前时间戳（相当于你说的提交空格保活）
+        echo "Last keep-alive sync: $(date -u '[%Y-%m-%d %H:%M:%S UTC]')" > keep_alive.txt
+        git add keep_alive.txt
+        
+        # 3. 如果 Python 脚本更新了日志（发了邮件），把日志也一起带上
+        if [ "${{ env.MAIL_SENT }}" = "true" ]; then
+          git add send_log.json
+          COMMIT_MSG="Update send_log & Keep-alive sync"
+        else
+          COMMIT_MSG="Keep-alive sync (Prevent workflow dormancy)"
+        fi
+        
+        # 4. 执行原生提交并推送
+        git commit -m "$COMMIT_MSG"
+        git push origin HEAD:${{ github.ref_name }}
