@@ -30,24 +30,27 @@ jobs:
         EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
         EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
       run: |
-        python monitor.py > output.log
+        # 使用 python -u 强制刷新缓冲区，确保 print 内容实时打印
+        python -u monitor.py > output.log
+        
+        # 打印完整的检索报告到 GitHub 控制台，让你一眼就能看到结果
+        echo "=== 中检院网站检索报告开始 ==="
         cat output.log
-        # 判断是否发送了新邮件
+        echo "=== 中检院网站检索报告结束 ==="
+        
         if grep -q "HAS_NEW_LOG=true" output.log; then
           echo "MAIL_SENT=true" >> $GITHUB_ENV
         fi
 
     - name: 纯原生 Git 命令保活与数据同步
       run: |
-        # 1. 配置 Git 机器人身份
         git config --global user.name "github-actions[bot]"
         git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
         
-        # 2. 无论是否发送邮件，都强制向保活文件写入当前时间戳（相当于你说的提交空格保活）
-        echo "Last keep-alive sync: $(date -u '[%Y-%m-%d %H:%M:%S UTC]')" > keep_alive.txt
+        # 强制写入包含纳秒的时间戳，确保文件内容绝对和昨天不一样，100%产生变动
+        echo "Last keep-alive sync: $(date -u '+%Y-%m-%d %H:%M:%S.%N UTC')" > keep_alive.txt
         git add keep_alive.txt
         
-        # 3. 如果 Python 脚本更新了日志（发了邮件），把日志也一起带上
         if [ "${{ env.MAIL_SENT }}" = "true" ]; then
           git add send_log.json
           COMMIT_MSG="Update send_log & Keep-alive sync"
@@ -55,6 +58,6 @@ jobs:
           COMMIT_MSG="Keep-alive sync (Prevent workflow dormancy)"
         fi
         
-        # 4. 执行原生提交并推送
-        git commit -m "$COMMIT_MSG"
+        # 使用 || true 兜底，哪怕没有任何变动，Git 也会优雅通过，绝不让工作流报错变红
+        git commit -m "$COMMIT_MSG" || echo "No changes to commit"
         git push origin HEAD:${{ github.ref_name }}
