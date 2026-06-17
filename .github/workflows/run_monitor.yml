@@ -30,16 +30,20 @@ jobs:
         EMAIL_USERNAME: ${{ secrets.EMAIL_USERNAME }}
         EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
       run: |
-        # 使用 python -u 强制刷新缓冲区，确保 print 内容实时打印
-        python -u monitor.py > output.log
+        echo "=== [1/3] 开始执行 Python 监控脚本 ==="
         
-        # 打印完整的检索报告到 GitHub 控制台，让你一眼就能看到结果
-        echo "=== 中检院网站检索报告开始 ==="
-        cat output.log
-        echo "=== 中检院网站检索报告结束 ==="
+        # 2>&1 表示把错误信息和正常打印一起吐出来
+        # tee output.log 表示既在控制台实时打印，又保存一份到文件供后面判断
+        python -u monitor.py 2>&1 | tee output.log
         
+        echo "=== [2/3] Python 脚本执行结束 ==="
+        
+        # 检查日志文件中是否有触发标识
         if grep -q "HAS_NEW_LOG=true" output.log; then
           echo "MAIL_SENT=true" >> $GITHUB_ENV
+          echo "=== [3/3] 结果：检测到更新并成功发送邮件！ ==="
+        else
+          echo "=== [3/3] 结果：本次运行未检测到新期数，或脚本执行不完整。 ==="
         fi
 
     - name: 纯原生 Git 命令保活与数据同步
