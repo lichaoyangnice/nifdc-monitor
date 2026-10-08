@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 
 # 配置常量
-URL = "https://www.nifdc.org.cn/nifdc/bshff/bzhwzh/bzwztzgg/index.html"
+URL = "https://www.nidc.org.cn/bshff/bzhwzh/bzwztzgg/index.html"
 RECEIVER = "1065351139@qq.com"
 LOG_FILE = "send_log.json"
 
@@ -97,7 +97,7 @@ def main():
         title = link.get_text().strip()
         href = link.get('href', '')
         if href and not href.startswith('http'):
-            href = "https://www.nifdc.org.cn" + href
+            href = "https://www.nidc.org.cn" + href
         
         # 提取期数
         match = re.search(r"第([0-9一二三四五六七八九十]+)期", title)
